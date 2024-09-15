@@ -7,6 +7,7 @@ from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash
 import os
 from itsdangerous import URLSafeTimedSerializer as Serializer
+from flask_cors import CORS
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -27,7 +28,7 @@ db = SQLAlchemy(app)
 mail = Mail(app)
 migrate = Migrate(app, db)  # Initialize Flask-Migrate
 limiter = Limiter(key_func=get_remote_address, app=app)
-
+CORS(app)
 # Utility functions
 def generate_verification_token(email):
     s = Serializer(app.config['SECRET_KEY'])

@@ -1,11 +1,9 @@
-from flask import Flask, request, jsonify
+from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
-from flask_mail import Mail, Message
+from flask_mail import Mail,Message
+from flask_migrate import Migrate
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_migrate import Migrate
-from werkzeug.security import generate_password_hash
-import os
 from itsdangerous import URLSafeTimedSerializer as Serializer
 from flask_cors import CORS
 
@@ -29,11 +27,12 @@ mail = Mail(app)
 migrate = Migrate(app, db)  # Initialize Flask-Migrate
 limiter = Limiter(key_func=get_remote_address, app=app)
 CORS(app)
+
 # Utility functions
 def generate_verification_token(email):
     s = Serializer(app.config['SECRET_KEY'])
     return s.dumps({'email': email})
-    
+
 def confirm_verification_token(token):
     s = Serializer(app.config['SECRET_KEY'])
     try:

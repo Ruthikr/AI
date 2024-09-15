@@ -1,14 +1,14 @@
 from app import app, db, mail, generate_verification_token, confirm_verification_token, send_verification_email
 from flask import request, jsonify
-from models import User
+from models import User, Profile
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_mail import Message
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 # Rate limiting
 limiter = Limiter(key_func=get_remote_address, app=app)
 
+# Registration Route
 @app.route("/register", methods=["POST"])
 @limiter.limit("5 per minute")
 def register():
@@ -32,6 +32,7 @@ def register():
 
     return jsonify({"message": "User registered successfully! Please check your email to verify your account."}), 201
 
+# Email Verification Route
 @app.route("/verify/<token>")
 def verify_email(token):
     email = confirm_verification_token(token)
@@ -44,6 +45,7 @@ def verify_email(token):
 
     return jsonify({"message": "Email verified successfully!"}), 200
 
+# Login Route
 @app.route("/login", methods=["POST"])
 @limiter.limit("10 per minute")
 def login():
@@ -62,11 +64,59 @@ def login():
     if not check_password_hash(user.password_hash, password):
         return jsonify({"error": "Invalid email or password"}), 401
 
-    return jsonify({"message": "Login successful!"}), 200
+    token = generate_verification_token(email)  # You can use the same function to generate a token
+    return jsonify({"message": "Login successful!", "token": token}), 200
 
-def send_verification_email(user_email):
-    token = generate_verification_token(user_email)
-    verification_url = f'http://localhost:5000/verify/{token}'
-    msg = Message('Email Verification', sender='your-email@example.com', recipients=[user_email])
-    msg.body = f'Please verify your email by clicking the link: {verification_url}'
-    mail.send(msg)
+# Get User Profile Route
+@app.route("/profile", methods=["GET"])
+@limiter.limit("5 per minute")
+def get_profile():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    token = auth_header.split(" ")[1]
+    user_email = confirm_verification_token(token)
+    if not user_email:
+        return jsonify({"error": "Invalid or expired token"}), 401
+
+    user = User.query.filter_by(email=user_email).first_or_404()
+    profile = Profile.query.filter_by(user_id=user.id).first()
+
+    return jsonify({
+        "username": user.username,
+        "email": user.email,
+        "bio": profile.bio if profile else None,
+        "profile_picture": profile.profile_picture if profile else None
+    }), 200
+
+# Update User Profile Route
+@app.route("/profile", methods=["POST"])
+@limiter.limit("5 per minute")
+def update_profile():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    token = auth_header.split(" ")[1]
+    user_email = confirm_verification_token(token)
+    if not user_email:
+        return jsonify({"error": "Invalid or expired token"}), 401
+
+    user = User.query.filter_by(email=user_email).first_or_404()
+    profile = Profile.query.filter_by(user_id=user.id).first()
+
+    data = request.json
+    bio = data.get("bio")
+    profile_picture = data.get("profile_picture")
+
+    if profile:
+        profile.bio = bio
+        profile.profile_picture = profile_picture
+    else:
+        profile = Profile(user_id=user.id, bio=bio, profile_picture=profile_picture)
+        db.session.add(profile)
+
+    db.session.commit()
+
+    return jsonify({"message": "Profile updated successfully!"}), 200
